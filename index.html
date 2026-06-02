@@ -198,11 +198,11 @@ input[type="color"]:hover { border-color: var(--border-mid); }
         <span class="section-label">Shape</span>
         <div class="ctrl-row">
             <label class="ctrl-label"><span>Density + spread</span><span class="ctrl-val" id="val-liss-density">15</span></label>
-            <input type="range" id="fx-liss-density" min="1" max="1000" step="1" value="15">
+            <input type="range" id="fx-liss-density" min="1" max="1500" step="1" value="15">
         </div>
         <div class="ctrl-row">
-            <label class="ctrl-label"><span>Thickness</span><span class="ctrl-val" id="val-thickness">1.00</span></label>
-            <input type="range" id="fx-thickness" min="0.1" max="5.0" step="0.01" value="1.0">
+            <label class="ctrl-label"><span>Thickness</span><span class="ctrl-val" id="val-thickness">0.50</span></label>
+            <input type="range" id="fx-thickness" min="0.1" max="5.0" step="0.01" value="0.5">
         </div>
         <div class="ctrl-row">
             <label class="ctrl-label"><span>Glow</span><span class="ctrl-val" id="val-glow">1.00</span></label>
@@ -230,7 +230,7 @@ const state = {
     mode: 'lissajous',        // 'lissajous' = v2 (36), 'legacy' = v1 (37)
     color: '#000000',
     bgColor: '#ffffff',
-    thickness: 1,
+    thickness: 0.5,
     glow: 1.0,
     lissOffset: 15,
     lissSpread: 0.25 + (15/1000)*1.75,
@@ -468,31 +468,29 @@ function draw() {
     const reverbGlow = 1; // simplified — no reverb slider
     const speedOsc = drawPhase;
 
-    // ── Glow canvas ──
-    const glowDecayAlpha = 0.22;
-    glowCtx.fillStyle = `rgba(${bg.r},${bg.g},${bg.b},${glowDecayAlpha})`;
-    glowCtx.fillRect(0, 0, w, h);
+    // ── Clear glow canvas (no fade/trail) ──
+    glowCtx.clearRect(0, 0, w, h);
 
-    // ── Main canvas ──
+    // ── Main canvas: full opaque clear ──
     mainCtx.fillStyle = `rgb(${bg.r},${bg.g},${bg.b})`;
     mainCtx.fillRect(0, 0, w, h);
 
     function setupGlowCtx() {
-        glowCtx.shadowBlur = (10 + 8) * state.glow;
+        glowCtx.shadowBlur = Math.max(2, 18 * state.glow);
         glowCtx.shadowColor = state.color;
         glowCtx.strokeStyle = state.color;
-        glowCtx.lineWidth = 4 * state.thickness;
+        glowCtx.lineWidth = 2 * state.thickness;
         glowCtx.lineCap = 'round'; glowCtx.lineJoin = 'round';
     }
     function setupMainCtx() {
         mainCtx.shadowBlur = 0;
         mainCtx.strokeStyle = state.color;
-        mainCtx.lineWidth = 3 * state.thickness;
+        mainCtx.lineWidth = 1.5 * state.thickness;
         mainCtx.lineCap = 'round'; mainCtx.lineJoin = 'round';
     }
 
     if (state.mode === 'lissajous') {
-        // ── V2: Catmull-Rom upsampled lissajous (from index 36) ──
+        // ── V2: Catmull-Rom upsampled lissajous ──
         const lissLen = Math.min(vRaw.length, 1024);
         const offset  = Math.min(state.lissOffset, lissLen - 1);
         const scl     = 0.5 * state.lissSpread;
@@ -506,7 +504,7 @@ function draw() {
         const upsample   = Math.max(1, Math.min(8, Math.ceil(scl * 4)));
         const totalSteps = lissLen * upsample;
 
-        function buildLissPath(ctx) {
+        function buildPath(ctx) {
             ctx.beginPath();
             for (let s = 0; s < totalSteps; s++) {
                 const fi = s / upsample, i0 = Math.floor(fi), t = fi - i0;
@@ -519,47 +517,49 @@ function draw() {
             }
             ctx.stroke();
         }
-        setupGlowCtx(); buildLissPath(glowCtx);
-        setupMainCtx(); buildLissPath(mainCtx);
+        // Glow pass (shadowBlur on mainCtx)
+        setupGlowCtx();
+        mainCtx.shadowBlur  = Math.max(2, 18 * state.glow);
+        mainCtx.shadowColor = state.color;
+        mainCtx.strokeStyle = state.color;
+        mainCtx.lineWidth   = 2 * state.thickness;
+        mainCtx.lineCap = 'round'; mainCtx.lineJoin = 'round';
+        buildPath(mainCtx);
+        // Crisp pass
+        setupMainCtx(); buildPath(mainCtx);
 
     } else {
-        // ── Legacy: simple direct-sample lissajous (from index 37) ──
+        // ── Legacy: simple direct-sample lissajous ──
         const lissLen = Math.min(vRaw.length, 1024);
         const offset  = Math.min(state.lissOffset, lissLen - 1);
         const scl     = 0.5 * state.lissSpread;
         const cosR    = Math.cos(speedOsc * 0.05);
         const sinR    = Math.sin(speedOsc * 0.05);
 
-        setupGlowCtx();
-        glowCtx.beginPath();
-        for (let i = 0; i < lissLen; i++) {
-            const nx = (vRaw[i] - 128) / 128;
-            const ny = (vRaw[(i + offset) % lissLen] - 128) / 128;
-            const rx = nx * scl, ry = ny * scl;
-            const px = w/2 + (rx*cosR - ry*sinR) * w/2;
-            const py = h/2 + (rx*sinR + ry*cosR) * h/2;
-            i === 0 ? glowCtx.moveTo(px, py) : glowCtx.lineTo(px, py);
+        function buildLegacyPath(ctx) {
+            ctx.beginPath();
+            for (let i = 0; i < lissLen; i++) {
+                const nx = (vRaw[i] - 128) / 128;
+                const ny = (vRaw[(i + offset) % lissLen] - 128) / 128;
+                const rx = nx * scl, ry = ny * scl;
+                const px = w/2 + (rx*cosR - ry*sinR) * w/2;
+                const py = h/2 + (rx*sinR + ry*cosR) * h/2;
+                i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+            }
+            ctx.stroke();
         }
-        glowCtx.stroke();
-
-        setupMainCtx();
-        mainCtx.beginPath();
-        for (let i = 0; i < lissLen; i++) {
-            const nx = (vRaw[i] - 128) / 128;
-            const ny = (vRaw[(i + offset) % lissLen] - 128) / 128;
-            const rx = nx * scl, ry = ny * scl;
-            const px = w/2 + (rx*cosR - ry*sinR) * w/2;
-            const py = h/2 + (rx*sinR + ry*cosR) * h/2;
-            i === 0 ? mainCtx.moveTo(px, py) : mainCtx.lineTo(px, py);
-        }
-        mainCtx.stroke();
+        // Glow pass
+        mainCtx.shadowBlur  = Math.max(2, 18 * state.glow);
+        mainCtx.shadowColor = state.color;
+        mainCtx.strokeStyle = state.color;
+        mainCtx.lineWidth   = 2 * state.thickness;
+        mainCtx.lineCap = 'round'; mainCtx.lineJoin = 'round';
+        buildLegacyPath(mainCtx);
+        // Crisp pass
+        setupMainCtx(); buildLegacyPath(mainCtx);
     }
 
-    // Composite glow onto main
-    mainCtx.globalCompositeOperation = 'source-over';
-    mainCtx.globalAlpha = 0.68;
-    mainCtx.drawImage(glowCanvas, 0, 0);
-    mainCtx.globalAlpha = 1.0;
+    mainCtx.shadowBlur = 0;
 }
 
 // Start draw loop (draws idle silently; audio kicks in once capture connects)
