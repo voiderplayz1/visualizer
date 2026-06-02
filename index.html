@@ -259,7 +259,8 @@ function initAudioGraph() {
     preAnalyser = audioCtx.createAnalyser(); preAnalyser.fftSize = 2048; preAnalyser.smoothingTimeConstant = 0.5;
     analyser    = audioCtx.createAnalyser(); analyser.fftSize = 2048;    analyser.smoothingTimeConstant = 0.5;
     const vol = audioCtx.createGain(); vol.gain.value = 1;
-    preAnalyser.connect(vol); vol.connect(analyser); analyser.connect(audioCtx.destination);
+    // analysis-only — NOT wired to destination, prevents loopback echo
+    preAnalyser.connect(vol); vol.connect(analyser);
 }
 function connectSource(node) { node.connect(preAnalyser); }
 
@@ -407,6 +408,12 @@ btnVersion.addEventListener('click', () => {
         btnVersion.textContent = 'Switch to Legacy ↻';
         btnVersion.classList.remove('legacy');
     }
+    // Flush both canvases so the new version renders on the very next frame
+    const bg = hexToRgb(state.bgColor);
+    mainCtx.fillStyle = `rgb(${bg.r},${bg.g},${bg.b})`;
+    mainCtx.fillRect(0, 0, mainCanvas.width, mainCanvas.height);
+    glowCtx.clearRect(0, 0, glowCanvas.width, glowCanvas.height);
+    drawPhase = 0;
 });
 
 // ── Hamburger / drag ──────────────────────────────────────────────────────────
