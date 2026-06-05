@@ -29,8 +29,7 @@ body {
 canvas { display: block; }
 #main-canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 1; }
 #glow-canvas  { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 0; pointer-events: none; }
-
-
+#node-canvas  { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 2; pointer-events: none; }
 
 /* Hamburger */
 #hamburger {
@@ -69,8 +68,6 @@ canvas { display: block; }
 }
 .panel-header:active { cursor: grabbing; }
 .panel-title { font-size: 0.78rem; letter-spacing: 5px; text-transform: uppercase; color: var(--text-dim); flex: 1; }
-.drag-pip { display: flex; gap: 3px; opacity: 0.18; }
-.drag-pip span { width: 3px; height: 3px; border-radius: 50%; background: #000; display: block; }
 
 .panel-section {
     padding: 12px 16px;
@@ -115,12 +112,30 @@ canvas { display: block; }
 .btn-toggle-on  { border-color: rgba(0,0,0,0.22); color: rgba(0,0,0,0.75); background: rgba(0,0,0,0.05); }
 .btn-toggle-off { border-color: rgba(0,0,0,0.1);  color: rgba(0,0,0,0.32);  background: rgba(0,0,0,0.02); }
 
-/* Version toggle */
 .btn-version {
     border-color: rgba(80,0,180,0.2); color: rgba(80,0,180,0.7); background: rgba(80,0,180,0.04);
 }
 .btn-version:hover { border-color: rgba(80,0,180,0.4); color: rgba(80,0,180,1); background: rgba(80,0,180,0.09); }
 .btn-version.legacy { border-color: rgba(180,80,0,0.3); color: rgba(160,70,0,0.8); background: rgba(180,80,0,0.05); }
+
+/* Node edit toggle */
+.btn-nodes-edit {
+    border-color: rgba(0,150,100,0.25); color: rgba(0,130,85,0.8); background: rgba(0,150,100,0.04);
+}
+.btn-nodes-edit:hover { border-color: rgba(0,150,100,0.45); color: rgba(0,120,80,1); background: rgba(0,150,100,0.09); }
+.btn-nodes-edit.active {
+    border-color: rgba(0,150,100,0.55); color: rgba(0,120,80,1); background: rgba(0,150,100,0.12);
+    animation: pulse-node 2s ease-in-out infinite;
+}
+@keyframes pulse-node { 0%,100%{box-shadow:0 0 0 0 rgba(0,150,100,0);}50%{box-shadow:0 0 0 4px rgba(0,150,100,0.12);} }
+
+/* Node add button */
+.btn-add-node {
+    border-color: rgba(0,150,100,0.2); color: rgba(0,130,85,0.7); background: rgba(0,150,100,0.03);
+}
+.btn-add-node:hover { border-color: rgba(0,150,100,0.4); color: rgba(0,120,80,1); background: rgba(0,150,100,0.08); }
+.btn-add-node:disabled { opacity: 0.35; cursor: not-allowed; }
+.btn-add-node:disabled:hover { border-color: rgba(0,150,100,0.2); color: rgba(0,130,85,0.7); background: rgba(0,150,100,0.03); }
 
 /* Sliders */
 .ctrl-row { display: flex; flex-direction: column; gap: 5px; }
@@ -152,20 +167,93 @@ input[type="color"] {
 }
 input[type="color"]:hover { border-color: var(--border-mid); }
 
+/* Node color picker for add flow */
+.node-color-row {
+    display: flex; align-items: center; gap: 8px;
+}
+.node-color-row input[type="color"] {
+    width: 38px; height: 30px; flex-shrink: 0;
+}
+.node-color-row .node-color-label {
+    font-size: 0.8rem; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--text-dim); font-style: italic;
+}
 
+/* Node list */
+.node-list { display: flex; flex-direction: column; gap: 6px; }
+.node-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 8px; border-radius: 4px;
+    background: rgba(0,0,0,0.025); border: 1px solid var(--border);
+    font-size: 0.82rem; letter-spacing: 1.5px; text-transform: uppercase;
+    color: var(--text-muted);
+}
+.node-swatch {
+    width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0;
+    border: 1px solid rgba(0,0,0,0.12);
+}
+.node-label { flex: 1; }
+.node-remove {
+    width: 18px; height: 18px; border-radius: 50%;
+    border: 1px solid rgba(0,0,0,0.12); background: transparent;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    font-size: 10px; color: var(--text-dim); line-height: 1;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+    flex-shrink: 0;
+}
+.node-remove:hover { border-color: rgba(200,50,40,0.4); color: rgba(200,50,40,0.85); background: rgba(200,50,40,0.06); }
+
+/* Influence radius slider */
+.ctrl-row-sm { display: flex; flex-direction: column; gap: 4px; }
 
 .tip { font-size: 0.78rem; letter-spacing: 0.2px; color: var(--text-dim); line-height: 1.6; font-style: italic; }
+
+/* Node pending color picker overlay */
+#node-color-overlay {
+    position: fixed; inset: 0; z-index: 500;
+    display: none; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.18); backdrop-filter: blur(4px);
+}
+#node-color-overlay.visible { display: flex; }
+#node-color-box {
+    background: var(--panel-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 22px 24px;
+    box-shadow: 0 12px 48px rgba(0,0,0,0.18);
+    display: flex; flex-direction: column; gap: 16px;
+    min-width: 220px;
+}
+#node-color-box h3 {
+    font-size: 0.78rem; letter-spacing: 5px; text-transform: uppercase;
+    color: var(--text-dim); font-weight: 400;
+}
+#node-color-box input[type="color"] { width: 100%; height: 44px; }
+.node-overlay-btns { display: flex; gap: 8px; }
+.node-overlay-btns .btn { font-size: 0.8rem; padding: 7px 10px; letter-spacing: 2px; }
 </style>
 </head>
 <body>
 
 <canvas id="main-canvas"></canvas>
 <canvas id="glow-canvas"></canvas>
+<canvas id="node-canvas"></canvas>
 
 <button id="hamburger" title="Toggle panel">
     <span></span><span></span><span></span>
 </button>
 
+<!-- Node color picker overlay -->
+<div id="node-color-overlay">
+    <div id="node-color-box">
+        <h3>Node Color</h3>
+        <input type="color" id="new-node-color-input" value="#ff4400">
+        <div class="node-overlay-btns">
+            <button class="btn btn-square" id="node-color-cancel" style="flex:1">Cancel</button>
+            <button class="btn btn-square btn-add-node" id="node-color-confirm" style="flex:1">Place ↓</button>
+        </div>
+    </div>
+</div>
 
 <div id="controls" class="panel">
     <div class="panel-header" id="controls-handle">
@@ -188,7 +276,7 @@ input[type="color"]:hover { border-color: var(--border-mid); }
             <input type="color" id="bg-color-picker" value="#ffffff">
         </div>
         <div class="color-row">
-            <span class="ctrl-label">Line color</span>
+            <span class="ctrl-label">Base line color</span>
             <input type="color" id="color-picker" value="#000000">
         </div>
     </div>
@@ -211,6 +299,21 @@ input[type="color"]:hover { border-color: var(--border-mid); }
         <button id="btn-rotation-toggle" class="btn btn-square btn-toggle-on">Toggle: Rotation ✓</button>
     </div>
 
+    <!-- Color Nodes -->
+    <div class="panel-section">
+        <span class="section-label">Color Nodes</span>
+        <div class="ctrl-row-sm">
+            <label class="ctrl-label"><span>Influence radius</span><span class="ctrl-val" id="val-node-radius">280</span></label>
+            <input type="range" id="fx-node-radius" min="40" max="800" step="1" value="280">
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+            <button id="btn-nodes-edit" class="btn btn-square btn-nodes-edit" style="flex:1">Edit Nodes</button>
+            <button id="btn-add-node" class="btn btn-square btn-add-node" style="flex:1" disabled>+ Add Node</button>
+        </div>
+        <div id="node-list" class="node-list"></div>
+        <p class="tip" id="node-tip" style="display:none">Click node to delete · drag to move</p>
+    </div>
+
     <!-- Version swap -->
     <div class="panel-section">
         <span class="section-label">Version</span>
@@ -224,10 +327,12 @@ const mainCanvas = document.getElementById('main-canvas');
 const mainCtx    = mainCanvas.getContext('2d');
 const glowCanvas = document.getElementById('glow-canvas');
 const glowCtx    = glowCanvas.getContext('2d');
+const nodeCanvas = document.getElementById('node-canvas');
+const nodeCtx    = nodeCanvas.getContext('2d');
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const state = {
-    mode: 'lissajous',        // 'lissajous' = v2 (36), 'legacy' = v1 (37)
+    mode: 'lissajous',
     color: '#000000',
     bgColor: '#ffffff',
     thickness: 0.5,
@@ -235,6 +340,9 @@ const state = {
     lissOffset: 15,
     lissSpread: 0.25 + (15/1000)*1.75,
     rotationEnabled: true,
+    nodeEditMode: false,
+    nodeRadius: 280,
+    nodes: [], // { x, y, color, r, g, b }
 };
 
 // ── Audio ─────────────────────────────────────────────────────────────────────
@@ -243,12 +351,11 @@ let captureStream = null, captureSource = null;
 let mediaRecorder = null, recordChunks = [], isRecording = false;
 let animationId = null;
 
-function updateFps() {}
-
 // ── Resize ────────────────────────────────────────────────────────────────────
 function resize() {
     mainCanvas.width = window.innerWidth;  mainCanvas.height = window.innerHeight;
     glowCanvas.width = window.innerWidth;  glowCanvas.height = window.innerHeight;
+    nodeCanvas.width = window.innerWidth;  nodeCanvas.height = window.innerHeight;
 }
 window.addEventListener('resize', resize); resize();
 
@@ -259,7 +366,6 @@ function initAudioGraph() {
     preAnalyser = audioCtx.createAnalyser(); preAnalyser.fftSize = 2048; preAnalyser.smoothingTimeConstant = 0.5;
     analyser    = audioCtx.createAnalyser(); analyser.fftSize = 2048;    analyser.smoothingTimeConstant = 0.5;
     const vol = audioCtx.createGain(); vol.gain.value = 1;
-    // analysis-only — NOT wired to destination, prevents loopback echo
     preAnalyser.connect(vol); vol.connect(analyser);
 }
 function connectSource(node) { node.connect(preAnalyser); }
@@ -315,7 +421,7 @@ function stopRecording() {
     btnRecord.innerHTML = '<span class="dot"></span>Record video';
 }
 
-// ── Screenshare / tab capture ─────────────────────────────────────────────────
+// ── Screenshare ────────────────────────────────────────────────────────────────
 btnCapture.addEventListener('click', async () => {
     if (captureStream) { stopCapture(); return; }
     try {
@@ -360,7 +466,6 @@ document.getElementById('bg-color-picker').oninput = e => {
     state.bgColor = e.target.value;
     document.documentElement.style.setProperty('--bg', state.bgColor);
     document.body.style.background = state.bgColor;
-    // Keep panel readable by inferring light/dark
     const hex = e.target.value.slice(1);
     const r = parseInt(hex.slice(0,2),16), g = parseInt(hex.slice(2,4),16), b = parseInt(hex.slice(4,6),16);
     const lum = (0.299*r + 0.587*g + 0.114*b) / 255;
@@ -377,7 +482,7 @@ function bindSlider(id, fmt, cb) {
     const el = document.getElementById('fx-' + id);
     const dv = document.getElementById('val-' + id);
     if (!el) return;
-    el.oninput = e => { const v = parseFloat(e.target.value); dv.textContent = fmt(v); cb(v); };
+    el.oninput = e => { const v = parseFloat(e.target.value); if (dv) dv.textContent = fmt(v); cb(v); };
 }
 bindSlider('liss-density', v => Math.round(v), v => {
     const vi = Math.round(v);
@@ -387,6 +492,7 @@ bindSlider('liss-density', v => Math.round(v), v => {
 });
 bindSlider('thickness', v => v.toFixed(2), v => state.thickness = v);
 bindSlider('glow',      v => v.toFixed(2), v => state.glow = v);
+bindSlider('node-radius', v => Math.round(v), v => state.nodeRadius = v);
 
 // ── Rotation ──────────────────────────────────────────────────────────────────
 const btnRotation = document.getElementById('btn-rotation-toggle');
@@ -408,7 +514,6 @@ btnVersion.addEventListener('click', () => {
         btnVersion.textContent = 'Switch to Legacy ↻';
         btnVersion.classList.remove('legacy');
     }
-    // Flush both canvases so the new version renders on the very next frame
     const bg = hexToRgb(state.bgColor);
     mainCtx.fillStyle = `rgb(${bg.r},${bg.g},${bg.b})`;
     mainCtx.fillRect(0, 0, mainCanvas.width, mainCanvas.height);
@@ -447,12 +552,307 @@ function hexToRgb(hex) {
     return { r: parseInt(hex.slice(1,3),16), g: parseInt(hex.slice(3,5),16), b: parseInt(hex.slice(5,7),16) };
 }
 
+// ── Color Node System ─────────────────────────────────────────────────────────
+const btnNodesEdit = document.getElementById('btn-nodes-edit');
+const btnAddNode   = document.getElementById('btn-add-node');
+const nodeListEl   = document.getElementById('node-list');
+const nodeTip      = document.getElementById('node-tip');
+const nodeOverlay  = document.getElementById('node-color-overlay');
+const newNodeColorInput = document.getElementById('new-node-color-input');
+
+// Node interaction state
+let nodeDragging = null;   // { index, startX, startY, origX, origY }
+let nodePointerDown = null; // { index, x, y, time }
+const NODE_HIT_R = 22;     // px hit radius
+const DRAG_THRESHOLD = 6;  // px to decide drag vs click
+let nodeHovering = -1;
+
+// Toggle edit mode
+btnNodesEdit.addEventListener('click', () => {
+    state.nodeEditMode = !state.nodeEditMode;
+    btnNodesEdit.textContent = state.nodeEditMode ? 'Done Editing ✓' : 'Edit Nodes';
+    btnNodesEdit.classList.toggle('active', state.nodeEditMode);
+    btnAddNode.disabled = !state.nodeEditMode;
+    nodeTip.style.display = state.nodeEditMode && state.nodes.length > 0 ? 'block' : 'none';
+    if (!state.nodeEditMode) {
+        nodeCtx.clearRect(0, 0, nodeCanvas.width, nodeCanvas.height);
+    }
+    updateNodeCanvas();
+});
+
+// Add node flow — show color picker overlay
+btnAddNode.addEventListener('click', () => {
+    if (state.nodes.length >= 5) return;
+    nodeOverlay.classList.add('visible');
+});
+
+document.getElementById('node-color-cancel').addEventListener('click', () => {
+    nodeOverlay.classList.remove('visible');
+});
+
+document.getElementById('node-color-confirm').addEventListener('click', () => {
+    nodeOverlay.classList.remove('visible');
+    const color = newNodeColorInput.value;
+    const rgb = hexToRgb(color);
+    const node = {
+        x: mainCanvas.width / 2,
+        y: mainCanvas.height / 2,
+        color,
+        r: rgb.r, g: rgb.g, b: rgb.b,
+        label: `Node ${state.nodes.length + 1}`
+    };
+    state.nodes.push(node);
+    renderNodeList();
+    updateNodeCanvas();
+    nodeTip.style.display = 'block';
+    if (state.nodes.length >= 5) btnAddNode.disabled = true;
+});
+
+function renderNodeList() {
+    nodeListEl.innerHTML = '';
+    state.nodes.forEach((nd, i) => {
+        const item = document.createElement('div');
+        item.className = 'node-item';
+        item.innerHTML = `
+            <span class="node-swatch" style="background:${nd.color}"></span>
+            <span class="node-label">${nd.label}</span>
+            <button class="node-remove" data-idx="${i}" title="Remove">✕</button>
+        `;
+        nodeListEl.appendChild(item);
+    });
+    nodeListEl.querySelectorAll('.node-remove').forEach(btn => {
+        btn.addEventListener('click', e => {
+            const idx = parseInt(e.currentTarget.dataset.idx);
+            state.nodes.splice(idx, 1);
+            // re-label
+            state.nodes.forEach((n, i) => n.label = `Node ${i+1}`);
+            renderNodeList();
+            updateNodeCanvas();
+            if (state.nodes.length < 5 && state.nodeEditMode) btnAddNode.disabled = false;
+            nodeTip.style.display = state.nodeEditMode && state.nodes.length > 0 ? 'block' : 'none';
+        });
+    });
+}
+
+// ── Node canvas interaction ────────────────────────────────────────────────────
+nodeCanvas.style.pointerEvents = 'auto'; // always listen, but only act in edit mode
+
+function getNodeAtPoint(x, y) {
+    for (let i = state.nodes.length - 1; i >= 0; i--) {
+        const nd = state.nodes[i];
+        const dx = nd.x - x, dy = nd.y - y;
+        if (Math.sqrt(dx*dx + dy*dy) <= NODE_HIT_R) return i;
+    }
+    return -1;
+}
+
+nodeCanvas.addEventListener('mousedown', e => {
+    if (!state.nodeEditMode) return;
+    const idx = getNodeAtPoint(e.clientX, e.clientY);
+    if (idx < 0) return;
+    e.preventDefault();
+    nodePointerDown = { index: idx, x: e.clientX, y: e.clientY, time: Date.now() };
+    nodeDragging = null;
+});
+
+window.addEventListener('mousemove', e => {
+    if (!state.nodeEditMode) return;
+
+    // hover detection
+    const hov = getNodeAtPoint(e.clientX, e.clientY);
+    if (hov !== nodeHovering) {
+        nodeHovering = hov;
+        nodeCanvas.style.cursor = hov >= 0 ? 'grab' : 'default';
+        updateNodeCanvas();
+    }
+
+    if (!nodePointerDown) return;
+    const dx = e.clientX - nodePointerDown.x;
+    const dy = e.clientY - nodePointerDown.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    if (!nodeDragging && dist > DRAG_THRESHOLD) {
+        nodeDragging = { index: nodePointerDown.index };
+        nodeCanvas.style.cursor = 'grabbing';
+    }
+    if (nodeDragging) {
+        state.nodes[nodeDragging.index].x = Math.max(0, Math.min(mainCanvas.width,  e.clientX));
+        state.nodes[nodeDragging.index].y = Math.max(0, Math.min(mainCanvas.height, e.clientY));
+        updateNodeCanvas();
+    }
+});
+
+window.addEventListener('mouseup', e => {
+    if (!state.nodeEditMode) { nodePointerDown = null; nodeDragging = null; return; }
+    if (nodePointerDown && !nodeDragging) {
+        // it's a click — delete node
+        const idx = getNodeAtPoint(e.clientX, e.clientY);
+        if (idx >= 0 && idx === nodePointerDown.index) {
+            state.nodes.splice(idx, 1);
+            state.nodes.forEach((n, i) => n.label = `Node ${i+1}`);
+            renderNodeList();
+            updateNodeCanvas();
+            if (state.nodes.length < 5) btnAddNode.disabled = false;
+            nodeTip.style.display = state.nodeEditMode && state.nodes.length > 0 ? 'block' : 'none';
+        }
+    }
+    nodePointerDown = null;
+    nodeDragging = null;
+    if (state.nodeEditMode) nodeCanvas.style.cursor = nodeHovering >= 0 ? 'grab' : 'default';
+});
+
+// Touch support for nodes
+nodeCanvas.addEventListener('touchstart', e => {
+    if (!state.nodeEditMode) return;
+    const t = e.touches[0];
+    const idx = getNodeAtPoint(t.clientX, t.clientY);
+    if (idx < 0) return;
+    e.preventDefault();
+    nodePointerDown = { index: idx, x: t.clientX, y: t.clientY, time: Date.now() };
+    nodeDragging = null;
+}, { passive: false });
+
+window.addEventListener('touchmove', e => {
+    if (!state.nodeEditMode || !nodePointerDown) return;
+    e.preventDefault();
+    const t = e.touches[0];
+    const dx = t.clientX - nodePointerDown.x;
+    const dy = t.clientY - nodePointerDown.y;
+    if (!nodeDragging && Math.sqrt(dx*dx+dy*dy) > DRAG_THRESHOLD) {
+        nodeDragging = { index: nodePointerDown.index };
+    }
+    if (nodeDragging) {
+        state.nodes[nodeDragging.index].x = Math.max(0, Math.min(mainCanvas.width,  t.clientX));
+        state.nodes[nodeDragging.index].y = Math.max(0, Math.min(mainCanvas.height, t.clientY));
+        updateNodeCanvas();
+    }
+}, { passive: false });
+
+window.addEventListener('touchend', e => {
+    if (!state.nodeEditMode) { nodePointerDown = null; nodeDragging = null; return; }
+    if (nodePointerDown && !nodeDragging) {
+        const t = e.changedTouches[0];
+        const idx = getNodeAtPoint(t.clientX, t.clientY);
+        if (idx >= 0 && idx === nodePointerDown.index) {
+            state.nodes.splice(idx, 1);
+            state.nodes.forEach((n, i) => n.label = `Node ${i+1}`);
+            renderNodeList();
+            updateNodeCanvas();
+            if (state.nodes.length < 5) btnAddNode.disabled = false;
+            nodeTip.style.display = state.nodeEditMode && state.nodes.length > 0 ? 'block' : 'none';
+        }
+    }
+    nodePointerDown = null;
+    nodeDragging = null;
+});
+
+let nodeAnimPhase = 0;
+function updateNodeCanvas() {
+    if (!state.nodeEditMode) {
+        nodeCtx.clearRect(0, 0, nodeCanvas.width, nodeCanvas.height);
+        return;
+    }
+    nodeCtx.clearRect(0, 0, nodeCanvas.width, nodeCanvas.height);
+    const w = nodeCanvas.width, h = nodeCanvas.height;
+
+    // Draw influence radius outlines + node circles
+    state.nodes.forEach((nd, i) => {
+        const isHover = i === nodeHovering;
+        const isDrag  = nodeDragging && nodeDragging.index === i;
+        const rad = state.nodeRadius;
+
+        // Influence ring
+        nodeCtx.save();
+        const gr = nodeCtx.createRadialGradient(nd.x, nd.y, 0, nd.x, nd.y, rad);
+        gr.addColorStop(0,   `rgba(${nd.r},${nd.g},${nd.b},0.08)`);
+        gr.addColorStop(0.7, `rgba(${nd.r},${nd.g},${nd.b},0.04)`);
+        gr.addColorStop(1,   `rgba(${nd.r},${nd.g},${nd.b},0.0)`);
+        nodeCtx.beginPath();
+        nodeCtx.arc(nd.x, nd.y, rad, 0, Math.PI * 2);
+        nodeCtx.fillStyle = gr;
+        nodeCtx.fill();
+
+        // Dashed ring
+        nodeCtx.beginPath();
+        nodeCtx.arc(nd.x, nd.y, rad, 0, Math.PI * 2);
+        nodeCtx.setLineDash([6, 5]);
+        nodeCtx.strokeStyle = `rgba(${nd.r},${nd.g},${nd.b},${isHover ? 0.55 : 0.28})`;
+        nodeCtx.lineWidth = 1;
+        nodeCtx.stroke();
+        nodeCtx.setLineDash([]);
+        nodeCtx.restore();
+
+        // Node circle
+        const nodeR = isDrag ? 12 : (isHover ? 11 : 9);
+        const innerR = 5;
+
+        // Outer halo
+        nodeCtx.save();
+        nodeCtx.beginPath();
+        nodeCtx.arc(nd.x, nd.y, nodeR + 4, 0, Math.PI * 2);
+        nodeCtx.fillStyle = `rgba(${nd.r},${nd.g},${nd.b},${isHover || isDrag ? 0.18 : 0.08})`;
+        nodeCtx.fill();
+
+        // Main circle
+        nodeCtx.beginPath();
+        nodeCtx.arc(nd.x, nd.y, nodeR, 0, Math.PI * 2);
+        nodeCtx.fillStyle = nd.color;
+        nodeCtx.fill();
+
+        // White center dot
+        nodeCtx.beginPath();
+        nodeCtx.arc(nd.x, nd.y, innerR, 0, Math.PI * 2);
+        nodeCtx.fillStyle = 'rgba(255,255,255,0.85)';
+        nodeCtx.fill();
+
+        // Delete hint on hover (small x)
+        if (isHover && !isDrag) {
+            nodeCtx.fillStyle = 'rgba(200,60,40,0.85)';
+            nodeCtx.font = 'bold 8px sans-serif';
+            nodeCtx.textAlign = 'center';
+            nodeCtx.textBaseline = 'middle';
+            nodeCtx.fillText('✕', nd.x, nd.y);
+        }
+
+        // Label
+        nodeCtx.font = '500 11px "EB Garamond", Georgia, serif';
+        nodeCtx.textAlign = 'center';
+        nodeCtx.textBaseline = 'top';
+        nodeCtx.fillStyle = `rgba(${nd.r},${nd.g},${nd.b},0.9)`;
+        nodeCtx.fillText(nd.label, nd.x, nd.y + nodeR + 6);
+
+        nodeCtx.restore();
+    });
+}
+
+// ── Color node influence on a point ──────────────────────────────────────────
+// Returns a blended RGB as [r, g, b] weighted by distance to each node
+function getNodeInfluence(px, py) {
+    if (state.nodes.length === 0) return null;
+    const rad = state.nodeRadius;
+    let totalW = 0;
+    let rr = 0, gg = 0, bb = 0;
+    state.nodes.forEach(nd => {
+        const dx = px - nd.x, dy = py - nd.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist < rad) {
+            // smooth falloff: weight = (1 - dist/rad)^2
+            const t = 1 - dist / rad;
+            const w = t * t;
+            rr += nd.r * w;
+            gg += nd.g * w;
+            bb += nd.b * w;
+            totalW += w;
+        }
+    });
+    if (totalW < 0.001) return null;
+    return [rr / totalW, gg / totalW, bb / totalW, Math.min(1, totalW)];
+}
+
 // ── Draw phase ────────────────────────────────────────────────────────────────
 let drawPhase = 0;
 
 function draw() {
     animationId = requestAnimationFrame(draw);
-    updateFps();
     if (!analyser) return;
 
     if (state.rotationEnabled) drawPhase += 0.012;
@@ -465,32 +865,18 @@ function draw() {
 
     const w = mainCanvas.width, h = mainCanvas.height;
     const bg = hexToRgb(state.bgColor);
-    const reverbGlow = 1; // simplified — no reverb slider
     const speedOsc = drawPhase;
 
-    // ── Clear glow canvas (no fade/trail) ──
     glowCtx.clearRect(0, 0, w, h);
-
-    // ── Main canvas: full opaque clear ──
     mainCtx.fillStyle = `rgb(${bg.r},${bg.g},${bg.b})`;
     mainCtx.fillRect(0, 0, w, h);
 
-    function setupGlowCtx() {
-        glowCtx.shadowBlur = Math.max(2, 18 * state.glow);
-        glowCtx.shadowColor = state.color;
-        glowCtx.strokeStyle = state.color;
-        glowCtx.lineWidth = 2 * state.thickness;
-        glowCtx.lineCap = 'round'; glowCtx.lineJoin = 'round';
-    }
-    function setupMainCtx() {
-        mainCtx.shadowBlur = 0;
-        mainCtx.strokeStyle = state.color;
-        mainCtx.lineWidth = 1.5 * state.thickness;
-        mainCtx.lineCap = 'round'; mainCtx.lineJoin = 'round';
-    }
+    // Base line color as rgb
+    const baseRgb = hexToRgb(state.color);
+
+    const hasNodes = state.nodes.length > 0;
 
     if (state.mode === 'lissajous') {
-        // ── V2: Catmull-Rom upsampled lissajous ──
         const lissLen = Math.min(vRaw.length, 1024);
         const offset  = Math.min(state.lissOffset, lissLen - 1);
         const scl     = 0.5 * state.lissSpread;
@@ -504,65 +890,173 @@ function draw() {
         const upsample   = Math.max(1, Math.min(8, Math.ceil(scl * 4)));
         const totalSteps = lissLen * upsample;
 
-        function buildPath(ctx) {
-            ctx.beginPath();
-            for (let s = 0; s < totalSteps; s++) {
+        if (!hasNodes) {
+            // Standard single-color draw
+            function buildPath(ctx) {
+                ctx.beginPath();
+                for (let s = 0; s < totalSteps; s++) {
+                    const fi = s / upsample, i0 = Math.floor(fi), t = fi - i0;
+                    const nx = catmull(lissGet(i0-1), lissGet(i0), lissGet(i0+1), lissGet(i0+2), t);
+                    const ny = catmull(lissGetY(i0-1), lissGetY(i0), lissGetY(i0+1), lissGetY(i0+2), t);
+                    const rx = nx * scl, ry = ny * scl;
+                    const px = w/2 + (rx*cosR - ry*sinR) * w/2;
+                    const py = h/2 + (rx*sinR + ry*cosR) * h/2;
+                    s === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+                }
+                ctx.stroke();
+            }
+            mainCtx.shadowBlur  = Math.max(2, 18 * state.glow);
+            mainCtx.shadowColor = state.color;
+            mainCtx.strokeStyle = state.color;
+            mainCtx.lineWidth   = 2 * state.thickness;
+            mainCtx.lineCap = 'round'; mainCtx.lineJoin = 'round';
+            buildPath(mainCtx);
+            mainCtx.shadowBlur = 0;
+            mainCtx.strokeStyle = state.color;
+            mainCtx.lineWidth   = 1.5 * state.thickness;
+            buildPath(mainCtx);
+        } else {
+            // Per-segment color based on node influence — draw short segments
+            // Pre-compute all points
+            const pts = [];
+            for (let s = 0; s <= totalSteps; s++) {
                 const fi = s / upsample, i0 = Math.floor(fi), t = fi - i0;
                 const nx = catmull(lissGet(i0-1), lissGet(i0), lissGet(i0+1), lissGet(i0+2), t);
                 const ny = catmull(lissGetY(i0-1), lissGetY(i0), lissGetY(i0+1), lissGetY(i0+2), t);
                 const rx = nx * scl, ry = ny * scl;
                 const px = w/2 + (rx*cosR - ry*sinR) * w/2;
                 const py = h/2 + (rx*sinR + ry*cosR) * h/2;
-                s === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+                pts.push([px, py]);
             }
-            ctx.stroke();
+
+            // Group into runs of similar color for fewer ctx state changes
+            // We sample midpoint of each segment for color
+            const CHUNK = 4; // segments per chunk
+            for (let s = 0; s < totalSteps; s += CHUNK) {
+                const end = Math.min(s + CHUNK, totalSteps);
+                // Midpoint of the chunk
+                const mid = Math.floor((s + end) / 2);
+                const [mpx, mpy] = pts[mid];
+                const inf = getNodeInfluence(mpx, mpy);
+
+                let r = baseRgb.r, g = baseRgb.g, b = baseRgb.b;
+                if (inf) {
+                    const [nr, ng, nb, nw] = inf;
+                    const blend = Math.min(1, nw * 1.4);
+                    r = Math.round(r * (1 - blend) + nr * blend);
+                    g = Math.round(g * (1 - blend) + ng * blend);
+                    b = Math.round(b * (1 - blend) + nb * blend);
+                }
+                const col = `rgb(${r},${g},${b})`;
+
+                // Glow pass
+                mainCtx.shadowBlur  = Math.max(2, 18 * state.glow);
+                mainCtx.shadowColor = col;
+                mainCtx.strokeStyle = col;
+                mainCtx.lineWidth   = 2 * state.thickness;
+                mainCtx.lineCap = 'round'; mainCtx.lineJoin = 'round';
+                mainCtx.beginPath();
+                mainCtx.moveTo(pts[s][0], pts[s][1]);
+                for (let j = s+1; j <= end; j++) mainCtx.lineTo(pts[j][0], pts[j][1]);
+                mainCtx.stroke();
+
+                // Crisp pass
+                mainCtx.shadowBlur = 0;
+                mainCtx.strokeStyle = col;
+                mainCtx.lineWidth = 1.5 * state.thickness;
+                mainCtx.beginPath();
+                mainCtx.moveTo(pts[s][0], pts[s][1]);
+                for (let j = s+1; j <= end; j++) mainCtx.lineTo(pts[j][0], pts[j][1]);
+                mainCtx.stroke();
+            }
         }
-        // Glow pass (shadowBlur on mainCtx)
-        setupGlowCtx();
-        mainCtx.shadowBlur  = Math.max(2, 18 * state.glow);
-        mainCtx.shadowColor = state.color;
-        mainCtx.strokeStyle = state.color;
-        mainCtx.lineWidth   = 2 * state.thickness;
-        mainCtx.lineCap = 'round'; mainCtx.lineJoin = 'round';
-        buildPath(mainCtx);
-        // Crisp pass
-        setupMainCtx(); buildPath(mainCtx);
 
     } else {
-        // ── Legacy: simple direct-sample lissajous ──
+        // ── Legacy mode ──
         const lissLen = Math.min(vRaw.length, 1024);
         const offset  = Math.min(state.lissOffset, lissLen - 1);
         const scl     = 0.5 * state.lissSpread;
         const cosR    = Math.cos(speedOsc * 0.05);
         const sinR    = Math.sin(speedOsc * 0.05);
 
-        function buildLegacyPath(ctx) {
-            ctx.beginPath();
-            for (let i = 0; i < lissLen; i++) {
-                const nx = (vRaw[i] - 128) / 128;
-                const ny = (vRaw[(i + offset) % lissLen] - 128) / 128;
+        if (!hasNodes) {
+            function buildLegacyPath(ctx) {
+                ctx.beginPath();
+                for (let i = 0; i < lissLen; i++) {
+                    const nx = (vRaw[i] - 128) / 128;
+                    const ny = (vRaw[(i + offset) % lissLen] - 128) / 128;
+                    const rx = nx * scl, ry = ny * scl;
+                    const px = w/2 + (rx*cosR - ry*sinR) * w/2;
+                    const py = h/2 + (rx*sinR + ry*cosR) * h/2;
+                    i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+                }
+                ctx.stroke();
+            }
+            mainCtx.shadowBlur  = Math.max(2, 18 * state.glow);
+            mainCtx.shadowColor = state.color;
+            mainCtx.strokeStyle = state.color;
+            mainCtx.lineWidth   = 2 * state.thickness;
+            mainCtx.lineCap = 'round'; mainCtx.lineJoin = 'round';
+            buildLegacyPath(mainCtx);
+            mainCtx.shadowBlur = 0;
+            mainCtx.strokeStyle = state.color;
+            mainCtx.lineWidth = 1.5 * state.thickness;
+            buildLegacyPath(mainCtx);
+        } else {
+            const pts = [];
+            for (let i = 0; i <= lissLen; i++) {
+                const ii = i % lissLen;
+                const nx = (vRaw[ii] - 128) / 128;
+                const ny = (vRaw[(ii + offset) % lissLen] - 128) / 128;
                 const rx = nx * scl, ry = ny * scl;
                 const px = w/2 + (rx*cosR - ry*sinR) * w/2;
                 const py = h/2 + (rx*sinR + ry*cosR) * h/2;
-                i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+                pts.push([px, py]);
             }
-            ctx.stroke();
+            const CHUNK = 4;
+            for (let s = 0; s < lissLen; s += CHUNK) {
+                const end = Math.min(s + CHUNK, lissLen);
+                const mid = Math.floor((s + end) / 2);
+                const [mpx, mpy] = pts[mid];
+                const inf = getNodeInfluence(mpx, mpy);
+                let r = baseRgb.r, g = baseRgb.g, b = baseRgb.b;
+                if (inf) {
+                    const [nr, ng, nb, nw] = inf;
+                    const blend = Math.min(1, nw * 1.4);
+                    r = Math.round(r * (1-blend) + nr * blend);
+                    g = Math.round(g * (1-blend) + ng * blend);
+                    b = Math.round(b * (1-blend) + nb * blend);
+                }
+                const col = `rgb(${r},${g},${b})`;
+                mainCtx.shadowBlur  = Math.max(2, 18 * state.glow);
+                mainCtx.shadowColor = col;
+                mainCtx.strokeStyle = col;
+                mainCtx.lineWidth   = 2 * state.thickness;
+                mainCtx.lineCap = 'round'; mainCtx.lineJoin = 'round';
+                mainCtx.beginPath();
+                mainCtx.moveTo(pts[s][0], pts[s][1]);
+                for (let j = s+1; j <= end; j++) mainCtx.lineTo(pts[j][0], pts[j][1]);
+                mainCtx.stroke();
+                mainCtx.shadowBlur = 0;
+                mainCtx.strokeStyle = col;
+                mainCtx.lineWidth = 1.5 * state.thickness;
+                mainCtx.beginPath();
+                mainCtx.moveTo(pts[s][0], pts[s][1]);
+                for (let j = s+1; j <= end; j++) mainCtx.lineTo(pts[j][0], pts[j][1]);
+                mainCtx.stroke();
+            }
         }
-        // Glow pass
-        mainCtx.shadowBlur  = Math.max(2, 18 * state.glow);
-        mainCtx.shadowColor = state.color;
-        mainCtx.strokeStyle = state.color;
-        mainCtx.lineWidth   = 2 * state.thickness;
-        mainCtx.lineCap = 'round'; mainCtx.lineJoin = 'round';
-        buildLegacyPath(mainCtx);
-        // Crisp pass
-        setupMainCtx(); buildLegacyPath(mainCtx);
     }
 
     mainCtx.shadowBlur = 0;
+
+    // Animate node canvas ring pulse in edit mode
+    if (state.nodeEditMode) {
+        nodeAnimPhase += 0.03;
+        updateNodeCanvas();
+    }
 }
 
-// Start draw loop (draws idle silently; audio kicks in once capture connects)
 draw();
 </script>
 </body>
