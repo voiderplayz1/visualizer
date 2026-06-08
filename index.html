@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -251,8 +251,12 @@ input[type="color"]:hover { border-color: var(--border-mid); }
         <div class="panel-section">
             <span class="section-label">Shape</span>
             <div class="ctrl-row">
-                <label class="ctrl-label"><span>Density + spread</span><span class="ctrl-val" id="val-liss-density">15</span></label>
+                <label class="ctrl-label"><span>Density</span><span class="ctrl-val" id="val-liss-density">15</span></label>
                 <input type="range" id="fx-liss-density" min="1" max="1500" step="1" value="15">
+            </div>
+            <div class="ctrl-row">
+                <label class="ctrl-label"><span>Spread</span><span class="ctrl-val" id="val-liss-spread">1.00</span></label>
+                <input type="range" id="fx-liss-spread" min="0.1" max="2.0" step="0.01" value="1.0">
             </div>
             <div class="ctrl-row">
                 <label class="ctrl-label"><span>Thickness</span><span class="ctrl-val" id="val-thickness">0.50</span></label>
@@ -425,17 +429,8 @@ uniform float u_nodeRadius;            // in [0..1] screen-space radius (normali
 uniform float u_aspect;
 
 void main() {
-    // Core edge falloff — clean line regardless of glow
     float edgeFade = 1.0 - abs(v_side);
-    edgeFade = pow(edgeFade, 0.5);
-
-    // Core alpha
-    float coreAlpha = pow(edgeFade, 2.0);
-
-    // Glow halo: wide soft bloom added on top, scaled by u_glow
-    float halo = pow(edgeFade, 0.12) * max(0.0, u_glow - 1.0) * 0.5;
-
-    float alpha = clamp(coreAlpha + halo, 0.0, 1.0);
+    float alpha = pow(edgeFade, 1.5);
     gl_FragColor = vec4(u_baseColor * alpha, alpha);
 }
 `;
@@ -470,22 +465,44 @@ varying vec2 v_uv;
 void main() {
     vec2 uv    = v_uv;
     vec4 curve = texture2D(u_curve, uv);
+    vec2 px    = 1.0 / u_resolution;
 
     // Sample background
     vec3 bg = texture2D(u_bg, vec2(0.5)).rgb;
 
-    if (curve.a < 0.001) {
-        gl_FragColor = vec4(bg, 1.0); return;
+    // ── Bloom: wide Gaussian sample around this pixel ─────────────────────────
+    // Only meaningful when glow > 1. We do a 13-tap radial sample.
+    float bloomStr = max(0.0, u_glow - 1.0) * 0.6;
+    vec4 bloom = vec4(0.0);
+    if (bloomStr > 0.001) {
+        float r = u_glow * 6.0; // bloom radius in pixels
+        // 2-pass simulation: sample in a cross + diagonals at multiple radii
+        float tw = 0.0;
+        vec2 dirs[12];
+        dirs[0]  = vec2( 1.0,  0.0); dirs[1]  = vec2(-1.0,  0.0);
+        dirs[2]  = vec2( 0.0,  1.0); dirs[3]  = vec2( 0.0, -1.0);
+        dirs[4]  = vec2( 0.707,  0.707); dirs[5]  = vec2(-0.707,  0.707);
+        dirs[6]  = vec2( 0.707, -0.707); dirs[7]  = vec2(-0.707, -0.707);
+        dirs[8]  = vec2( 0.383,  0.924); dirs[9]  = vec2(-0.383,  0.924);
+        dirs[10] = vec2( 0.924,  0.383); dirs[11] = vec2(-0.924,  0.383);
+        for (int s = 1; s <= 4; s++) {
+            float dist = float(s) * r * 0.25;
+            float w = exp(-float(s) * float(s) * 0.4);
+            for (int d = 0; d < 12; d++) {
+                vec2 off = dirs[d] * dist * px;
+                bloom += texture2D(u_curve, uv + off) * w;
+                tw += w;
+            }
+        }
+        bloom = bloom / tw;
     }
 
-    // Compute node influence for this fragment
+    // Compute node influence for this pixel
     float totalW = 0.0;
     vec3  nodeMix = vec3(0.0);
-
     for (int i = 0; i < MAX_NODES; i++) {
         if (float(i) >= u_nodeCount) break;
         vec2  diff = uv - u_nodePos[i];
-        // Correct for aspect (nodes stored in screen space)
         diff.x *= u_resolution.x / u_resolution.y;
         float dist = length(diff);
         float nr   = u_nodeRadius;
@@ -503,19 +520,26 @@ void main() {
         lineColor = mix(u_baseColor, nodeMix / totalW, blend);
     }
 
-    // Glow: composite curve alpha with soft halo
-    float alpha   = curve.a;
-    float glowAmt = pow(alpha, 1.0 / max(0.1, u_glow * 0.6 + 0.4)) * u_glow * 0.5;
-    vec3  final   = mix(bg, lineColor, min(1.0, alpha + glowAmt));
+    // Composite: bg + bloom halo (additive) + sharp curve on top
+    float sharpAlpha = curve.a;
+    vec3 final = bg;
 
-    // Additive node glow on top based on intensity slider
-    vec3 emissiveNode = vec3(0.0);
-    if (totalW > 0.001) {
-        emissiveNode = (nodeMix / totalW) * min(1.0, totalW) * u_nodeGlow * 0.5;
+    // Add bloom underneath (additive glow halo)
+    if (bloomStr > 0.001) {
+        vec3 bloomColor = lineColor; // tinted by node color if applicable
+        final += bloomColor * bloom.a * bloomStr;
     }
-    
-    final += emissiveNode;
-    gl_FragColor  = vec4(min(final, vec3(1.0)), 1.0);
+
+    // Sharp curve on top
+    final = mix(final, lineColor, sharpAlpha);
+
+    // Additive node glow
+    if (totalW > 0.001) {
+        vec3 emissiveNode = (nodeMix / totalW) * min(1.0, totalW) * u_nodeGlow * 0.5;
+        final += emissiveNode;
+    }
+
+    gl_FragColor = vec4(min(final, vec3(1.0)), 1.0);
 }
 `;
 
@@ -566,7 +590,7 @@ function buildCurveBuffer(segs) {
 const curveBuf    = buildCurveBuffer(CURVE_SEGS);
 const curveVCount = 2 * (CURVE_SEGS + 1);
 
-// ─── Fullscreen quad ──────────────────────────────────────────────────────────
+
 const quadBuf = gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
 gl.bufferData(gl.ARRAY_BUFFER,
@@ -624,7 +648,7 @@ const state = {
     thickness: 0.5,
     glow: 1.0,
     lissOffset: 15,
-    lissSpread: 0.25 + (15/1000)*1.75,
+    lissSpread: 1.0,
     rotationEnabled: false,
     nodeEditMode: false,
     nodeRadius: 280,
@@ -736,7 +760,7 @@ function draw() {
     // Normalised radius (relative to width)
     const nodeRadNorm = state.nodeRadius / w;
 
-    const scl      = 0.5 * state.lissSpread;
+    const scl      = 0.45 * state.lissSpread;
     const aspect   = w / h;
     const legacyF  = state.mode === 'legacy' ? 1.0 : 0.0;
     // Thickness in clip space (approximate: 1px ≈ 2/w in clip)
@@ -1102,9 +1126,9 @@ function bindSlider(id, fmt, cb) {
 }
 bindSlider('liss-density', v => Math.round(v), v => {
     state.lissOffset = Math.round(v);
-    state.lissSpread = 0.25 + (v/1000)*1.75;
     document.getElementById('val-liss-density').textContent = Math.round(v);
 });
+bindSlider('liss-spread',   v => v.toFixed(2), v => { state.lissSpread = v; });
 bindSlider('thickness',    v => v.toFixed(2), v => state.thickness = v);
 bindSlider('glow',         v => v.toFixed(2), v => state.glow = v);
 bindSlider('node-radius',  v => Math.round(v), v => { state.nodeRadius = v; markNodeDirty(); });
