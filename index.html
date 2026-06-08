@@ -262,7 +262,7 @@ input[type="color"]:hover { border-color: var(--border-mid); }
                 <label class="ctrl-label"><span>Glow</span><span class="ctrl-val" id="val-glow">1.00</span></label>
                 <input type="range" id="fx-glow" min="0.0" max="5.0" step="0.01" value="1.0">
             </div>
-            <button id="btn-rotation-toggle" class="btn btn-square btn-toggle-on">Toggle: Rotation ✓</button>
+
         </div>
 
         <div class="panel-section">
@@ -425,12 +425,18 @@ uniform float u_nodeRadius;            // in [0..1] screen-space radius (normali
 uniform float u_aspect;
 
 void main() {
-    // Glow: side=-1..1, falloff from centre of stroke
+    // Core edge falloff — clean line regardless of glow
     float edgeFade = 1.0 - abs(v_side);
-    edgeFade = pow(edgeFade, 0.5);                 // softer
-    float glowFade = pow(edgeFade, 1.0 / max(0.1, u_glow));
+    edgeFade = pow(edgeFade, 0.5);
 
-    gl_FragColor = vec4(u_baseColor * glowFade, glowFade);
+    // Core alpha
+    float coreAlpha = pow(edgeFade, 2.0);
+
+    // Glow halo: wide soft bloom added on top, scaled by u_glow
+    float halo = pow(edgeFade, 0.12) * max(0.0, u_glow - 1.0) * 0.5;
+
+    float alpha = clamp(coreAlpha + halo, 0.0, 1.0);
+    gl_FragColor = vec4(u_baseColor * alpha, alpha);
 }
 `;
 
@@ -619,7 +625,7 @@ const state = {
     glow: 1.0,
     lissOffset: 15,
     lissSpread: 0.25 + (15/1000)*1.75,
-    rotationEnabled: true,
+    rotationEnabled: false,
     nodeEditMode: false,
     nodeRadius: 280,
     nodeGlow: 1.0,
@@ -700,7 +706,7 @@ const screenLocs = {
 function draw() {
     animId = requestAnimationFrame(draw);
 
-    if (state.rotationEnabled) drawPhase += 0.012;
+    
 
     const w = glCanvas.width, h = glCanvas.height;
 
@@ -888,7 +894,7 @@ function markNodeDirty() {
 }
 
 // ─── Node interaction ─────────────────────────────────────────────────────────
-nodeCanvas.style.pointerEvents = 'auto';
+nodeCanvas.style.pointerEvents = state.nodeEditMode ? 'auto' : 'none';
 const NODE_HIT_R      = 22;
 const DRAG_THRESHOLD  = 6;
 let nodePointerDown   = null;
@@ -1104,13 +1110,47 @@ bindSlider('glow',         v => v.toFixed(2), v => state.glow = v);
 bindSlider('node-radius',  v => Math.round(v), v => { state.nodeRadius = v; markNodeDirty(); });
 bindSlider('node-glow',    v => v.toFixed(2), v => { state.nodeGlow = v; markNodeDirty(); });
 
-// Rotation
-const btnRotation = document.getElementById('btn-rotation-toggle');
-btnRotation.addEventListener('click', () => {
-    state.rotationEnabled = !state.rotationEnabled;
-    btnRotation.textContent = 'Toggle: Rotation ' + (state.rotationEnabled ? '✓' : '✗');
-    btnRotation.className = 'btn btn-square ' + (state.rotationEnabled ? 'btn-toggle-on' : 'btn-toggle-off');
-});
+// ─── Drag-to-rotate on main canvas ───────────────────────────────────────────
+{
+    let dragRotating = false;
+    let rotLastX = 0;
+
+    glCanvas.addEventListener('mousedown', e => {
+        // Don't capture if in node edit mode (node canvas handles that)
+        if (state.nodeEditMode) return;
+        dragRotating = true;
+        rotLastX = e.clientX;
+        glCanvas.style.cursor = 'grabbing';
+        e.preventDefault();
+    });
+    window.addEventListener('mousemove', e => {
+        if (!dragRotating) return;
+        const dx = e.clientX - rotLastX;
+        rotLastX = e.clientX;
+        drawPhase += dx * 0.008;
+    });
+    window.addEventListener('mouseup', () => {
+        if (!dragRotating) return;
+        dragRotating = false;
+        glCanvas.style.cursor = 'grab';
+    });
+
+    // Touch support
+    glCanvas.addEventListener('touchstart', e => {
+        if (state.nodeEditMode) return;
+        dragRotating = true;
+        rotLastX = e.touches[0].clientX;
+    }, { passive: true });
+    window.addEventListener('touchmove', e => {
+        if (!dragRotating) return;
+        const dx = e.touches[0].clientX - rotLastX;
+        rotLastX = e.touches[0].clientX;
+        drawPhase += dx * 0.008;
+    }, { passive: true });
+    window.addEventListener('touchend', () => { dragRotating = false; });
+
+    glCanvas.style.cursor = 'grab';
+}
 
 // Version
 const btnVersion = document.getElementById('btn-version');
@@ -1159,6 +1199,8 @@ btnNodesEdit.addEventListener('click', () => {
     btnNodesEdit.classList.toggle('active', state.nodeEditMode);
     btnAddNode.disabled = !state.nodeEditMode;
     nodeTip.style.display = state.nodeEditMode && state.nodes.length > 0 ? 'block' : 'none';
+    nodeCanvas.style.pointerEvents = state.nodeEditMode ? 'auto' : 'none';
+    glCanvas.style.cursor = state.nodeEditMode ? 'default' : 'grab';
     markNodeDirty();
 });
 btnAddNode.addEventListener('click', () => {
