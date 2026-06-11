@@ -232,6 +232,14 @@ input[type="color"]:hover { border-color: var(--border-mid); }
         <div class="panel-section">
             <span class="section-label">Source</span>
             <button id="btn-record" class="btn btn-record"><span class="dot"></span>Record video</button>
+            <div class="ctrl-row-sm">
+                <label class="ctrl-label"><span>Resolution</span><span class="ctrl-val" id="val-rec-res">1280 × 720</span></label>
+                <input type="range" id="rec-res" min="0" max="3" step="1" value="1">
+            </div>
+            <div class="ctrl-row-sm">
+                <label class="ctrl-label"><span>Frame rate</span><span class="ctrl-val" id="val-rec-fps">60 fps</span></label>
+                <input type="range" id="rec-fps" min="24" max="120" step="1" value="60">
+            </div>
             <button id="btn-capture" class="btn btn-capture"><span class="dot"></span>Capture app / tab</button>
             <p class="tip">Tick "Share audio" in the browser picker.</p>
         </div>
@@ -974,12 +982,36 @@ const btnCapture = document.getElementById('btn-capture');
 
 btnRecord.addEventListener('click', () => isRecording ? stopRecording() : startRecording());
 
-const REC_W = 1280, REC_H = 720;
+// Recording resolution presets [label, w, h]
+const REC_PRESETS = [
+    ['720 × 480',   720,  480],
+    ['1280 × 720',  1280,  720],
+    ['1920 × 1080', 1920, 1080],
+    ['2560 × 1440', 2560, 1440],
+];
+let recPresetIdx = 1; // default 720p
+let recFPS = 60;
+
+const recResSlider = document.getElementById('rec-res');
+const recResVal    = document.getElementById('val-rec-res');
+const recFpsSlider = document.getElementById('rec-fps');
+const recFpsVal    = document.getElementById('val-rec-fps');
+
+recResSlider.addEventListener('input', e => {
+    recPresetIdx = parseInt(e.target.value);
+    recResVal.textContent = REC_PRESETS[recPresetIdx][0];
+});
+recFpsSlider.addEventListener('input', e => {
+    recFPS = parseInt(e.target.value);
+    recFpsVal.textContent = recFPS + ' fps';
+});
+
 let recOffscreen = null, recAnimId = null;
 
 function startRecording() {
     if (!audioCtx) { alert('Capture audio first.'); return; }
     if (audioCtx.state === 'suspended') audioCtx.resume();
+    const [, REC_W, REC_H] = REC_PRESETS[recPresetIdx];
     recOffscreen = document.createElement('canvas');
     recOffscreen.width = REC_W; recOffscreen.height = REC_H;
     const rCtx = recOffscreen.getContext('2d');
@@ -989,7 +1021,7 @@ function startRecording() {
         recAnimId = requestAnimationFrame(compositeFrame);
     }
     recAnimId = requestAnimationFrame(compositeFrame);
-    const cs   = recOffscreen.captureStream(60);
+    const cs   = recOffscreen.captureStream(recFPS);
     const ad   = audioCtx.createMediaStreamDestination();
     analyser.connect(ad);
     const at = ad.stream.getAudioTracks()[0]; if (at) cs.addTrack(at);
